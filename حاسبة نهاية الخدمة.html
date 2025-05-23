@@ -1,0 +1,487 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>حاسبة مكافأة نهاية الخدمة</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #e0f7fa, #b2ebf2); /* Gradient background */
+            direction: rtl;
+            font-size: 18px;
+        }
+        .container {
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 600px;
+            text-align: center;
+            border: 2px solid #0288d1;
+        }
+        h1 {
+            font-size: 32px;
+            color: #01579b;
+            margin-bottom: 20px;
+            background: linear-gradient(90deg, #0288d1, #4fc3f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            gap: 10px;
+        }
+        label {
+            flex: 1;
+            font-size: 18px;
+            color: #0277bd;
+            font-weight: bold;
+        }
+        input, select {
+            flex: 2;
+            padding: 10px;
+            font-size: 16px;
+            border: 2px solid #4fc3f7;
+            border-radius: 6px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        input:focus, select:focus {
+            border-color: #0288d1;
+            box-shadow: 0 0 8px rgba(2, 136, 209, 0.3);
+            outline: none;
+        }
+        button {
+            background: linear-gradient(90deg, #0288d1, #4fc3f7);
+            color: white;
+            padding: 12px 24px;
+            font-size: 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px;
+            transition: transform 0.1s, box-shadow 0.3s;
+        }
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(2, 136, 209, 0.4);
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #e3f2fd;
+            border: 2px solid #0288d1;
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #4fc3f7;
+            text-align: right;
+        }
+        th {
+            background: linear-gradient(90deg, #0288d1, #4fc3f7);
+            color: white;
+            font-weight: bold;
+        }
+        td {
+            background-color: #f8f9fa;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #0288d1;
+        }
+        #unfairDismissalCompensationField, #unpaidSalariesDetails, #otherBenefitsDetails {
+            display: none;
+        }
+        .date-field {
+            display: inline-block;
+            width: 32%;
+            margin-right: 1%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>حاسبة مكافأة نهاية الخدمة</h1>
+        <div class="form-group">
+            <label for="salary">الراتب الشهري الكلي الأخير (ريال سعودي):</label>
+            <input type="number" id="salary" placeholder="أدخل الراتب" min="0" required>
+        </div>
+        <div class="form-group">
+            <label for="years">عدد سنوات العمل:</label>
+            <input type="number" id="years" placeholder="أدخل عدد السنوات" min="0" step="1" required>
+        </div>
+        <div class="form-group">
+            <label for="terminationMethod">طريقة الإنهاء:</label>
+            <select id="terminationMethod" onchange="toggleCompensationField()">
+                <option value="contractEnd">انتهاء العقد أو الفصل (سبب مشروع)</option>
+                <option value="resignLessThan2">استقالة (أقل من سنتين)</option>
+                <option value="resign2to5">استقالة (من 2 إلى 5 سنوات)</option>
+                <option value="resign5to10">استقالة (من 5 إلى 10 سنوات)</option>
+                <option value="resignAfter10">استقالة (بعد 10 سنوات أو أكثر)</option>
+                <option value="unfairDismissal">فصل تعسفي (غير مشروع)</option>
+                <option value="article80">فصل بموجب المادة 80 (مخالفة جسيمة)</option>
+            </select>
+        </div>
+        <div id="unfairDismissalCompensationField" class="form-group">
+            <label for="unfairDismissalCompensation">تعويض الفصل التعسفي (ريال سعودي):</label>
+            <input type="number" id="unfairDismissalCompensation" placeholder="أدخل التعويض" min="0" value="0" onfocus="if(this.value === '0') this.value = '';">
+        </div>
+        <div class="form-group">
+            <label for="hasUnpaidSalaries">هل هناك رواتب متأخرة؟</label>
+            <select id="hasUnpaidSalaries" onchange="toggleUnpaidSalariesDetails()">
+                <option value="no">لا</option>
+                <option value="yes">نعم</option>
+            </select>
+        </div>
+        <div id="unpaidSalariesDetails">
+            <div class="form-group">
+                <label for="lastPaidMonth">تاريخ آخر راتب تم قبضه:</label>
+                <div style="display: flex; gap: 5px;">
+                    <select id="lastPaidMonth" class="date-field">
+                        <option value="1">يناير</option>
+                        <option value="2">فبراير</option>
+                        <option value="3">مارس</option>
+                        <option value="4">أبريل</option>
+                        <option value="5">مايو</option>
+                        <option value="6">يونيو</option>
+                        <option value="7">يوليو</option>
+                        <option value="8">أغسطس</option>
+                        <option value="9">سبتمبر</option>
+                        <option value="10">أكتوبر</option>
+                        <option value="11">نوفمبر</option>
+                        <option value="12">ديسمبر</option>
+                    </select>
+                    <select id="lastPaidYear" class="date-field">
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="lastWorkingDay">آخر يوم عمل:</label>
+                <div style="display: flex; gap: 5px;">
+                    <select id="lastWorkingDay" class="date-field">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                        <option value="16">16</option>
+                        <option value="17">17</option>
+                        <option value="18">18</option>
+                        <option value="19">19</option>
+                        <option value="20">20</option>
+                        <option value="21">21</option>
+                        <option value="22">22</option>
+                        <option value="23">23</option>
+                        <option value="24">24</option>
+                        <option value="25">25</option>
+                        <option value="26">26</option>
+                        <option value="27">27</option>
+                        <option value="28">28</option>
+                        <option value="29">29</option>
+                        <option value="30">30</option>
+                        <option value="31">31</option>
+                    </select>
+                    <select id="lastWorkingMonth" class="date-field">
+                        <option value="1">يناير</option>
+                        <option value="2">فبراير</option>
+                        <option value="3">مارس</option>
+                        <option value="4">أبريل</option>
+                        <option value="5">مايو</option>
+                        <option value="6">يونيو</option>
+                        <option value="7">يوليو</option>
+                        <option value="8">أغسطس</option>
+                        <option value="9">سبتمبر</option>
+                        <option value="10">أكتوبر</option>
+                        <option value="11">نوفمبر</option>
+                        <option value="12">ديسمبر</option>
+                    </select>
+                    <select id="lastWorkingYear" class="date-field">
+                        <option value="2020">2020</option>
+                        <option value="2021">2021</option>
+                        <option value="2022">2022</option>
+                        <option value="2023">2023</option>
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="vacationDays">عدد الأيام المستحقة كبدل إجازة:</label>
+            <input type="number" id="vacationDays" placeholder="أدخل عدد الأيام" min="0" step="1" value="0" onfocus="if(this.value === '0') this.value = '';">
+        </div>
+        <div class="form-group">
+            <label for="flightBeneficiaries">عدد المستحقين لتذاكر الطيران:</label>
+            <input type="number" id="flightBeneficiaries" placeholder="أدخل عدد المستحقين" min="0" step="1" value="0" onfocus="if(this.value === '0') this.value = '';">
+        </div>
+        <div class="form-group">
+            <label for="flightTicketValue">قيمة تذكرة الطيران للشخص الواحد (ريال سعودي):</label>
+            <input type="number" id="flightTicketValue" placeholder="أدخل قيمة التذكرة" min="0" value="0" onfocus="if(this.value === '0') this.value = '';">
+        </div>
+        <div class="form-group">
+            <label for="otherBenefits">مستحقات أخرى (ريال سعودي):</label>
+            <input type="number" id="otherBenefits" placeholder="أدخل المستحقات الأخرى" min="0" value="0" onfocus="if(this.value === '0') this.value = '';" onchange="toggleOtherBenefitsDetails()">
+        </div>
+        <div id="otherBenefitsDetails" class="form-group">
+            <label for="otherBenefitsDescription">ما هي المستحقات الأخرى؟</label>
+            <input type="text" id="otherBenefitsDescription" placeholder="اكتب تفاصيل المستحقات">
+        </div>
+        <button onclick="calculate()">احسب</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function toggleCompensationField() {
+            const method = document.getElementById('terminationMethod').value;
+            const compensationField = document.getElementById('unfairDismissalCompensationField');
+            if (method === 'unfairDismissal') {
+                compensationField.style.display = 'flex';
+            } else {
+                compensationField.style.display = 'none';
+                document.getElementById('unfairDismissalCompensation').value = '0';
+            }
+        }
+
+        function toggleUnpaidSalariesDetails() {
+            const hasUnpaidSalaries = document.getElementById('hasUnpaidSalaries').value;
+            const unpaidSalariesDetails = document.getElementById('unpaidSalariesDetails');
+            if (hasUnpaidSalaries === 'yes') {
+                unpaidSalariesDetails.style.display = 'block';
+            } else {
+                unpaidSalariesDetails.style.display = 'none';
+                document.getElementById('lastPaidMonth').value = '1';
+                document.getElementById('lastPaidYear').value = '2020';
+                document.getElementById('lastWorkingDay').value = '1';
+                document.getElementById('lastWorkingMonth').value = '1';
+                document.getElementById('lastWorkingYear').value = '2020';
+            }
+        }
+
+        function toggleOtherBenefitsDetails() {
+            const otherBenefits = parseFloat(document.getElementById('otherBenefits').value) || 0;
+            const otherBenefitsDetails = document.getElementById('otherBenefitsDetails');
+            if (otherBenefits > 0) {
+                otherBenefitsDetails.style.display = 'flex';
+            } else {
+                otherBenefitsDetails.style.display = 'none';
+                document.getElementById('otherBenefitsDescription').value = '';
+            }
+        }
+
+        function formatNumber(number) {
+            return number.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function calculateDaysDifference(lastPaidYear, lastPaidMonth, lastWorkingYear, lastWorkingMonth, lastWorkingDay) {
+            const startDate = new Date(lastPaidYear, lastPaidMonth - 1, 1);
+            const endDate = new Date(lastWorkingYear, lastWorkingMonth - 1, lastWorkingDay);
+            const diffTime = endDate - startDate;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays > 0 ? diffDays : 0;
+        }
+
+        function daysToMonthsAndDays(days) {
+            const months = Math.floor(days / 30);
+            const remainingDays = days % 30;
+            return { months, remainingDays };
+        }
+
+        function calculate() {
+            const salary = parseFloat(document.getElementById('salary').value);
+            const years = parseInt(document.getElementById('years').value);
+            const terminationMethod = document.getElementById('terminationMethod').value;
+            const unfairDismissalCompensation = parseFloat(document.getElementById('unfairDismissalCompensation').value) || 0;
+            const hasUnpaidSalaries = document.getElementById('hasUnpaidSalaries').value;
+            const lastPaidMonth = parseInt(document.getElementById('lastPaidMonth').value);
+            const lastPaidYear = parseInt(document.getElementById('lastPaidYear').value);
+            const lastWorkingDay = parseInt(document.getElementById('lastWorkingDay').value);
+            const lastWorkingMonth = parseInt(document.getElementById('lastWorkingMonth').value);
+            const lastWorkingYear = parseInt(document.getElementById('lastWorkingYear').value);
+            const vacationDays = parseInt(document.getElementById('vacationDays').value) || 0;
+            const flightBeneficiaries = parseInt(document.getElementById('flightBeneficiaries').value) || 0;
+            const flightTicketValue = parseFloat(document.getElementById('flightTicketValue').value) || 0;
+            const otherBenefits = parseFloat(document.getElementById('otherBenefits').value) || 0;
+            const otherBenefitsDescription = document.getElementById('otherBenefitsDescription').value;
+            let result = '';
+
+            if (isNaN(salary) || salary <= 0 || isNaN(years) || years < 0) {
+                result = 'الرجاء إدخال راتب وعدد سنوات صحيحين';
+            } else if (hasUnpaidSalaries === 'yes' && (lastWorkingYear < lastPaidYear || (lastWorkingYear === lastPaidYear && lastWorkingMonth <= lastPaidMonth))) {
+                result = 'يجب أن يكون تاريخ آخر يوم عمل بعد تاريخ آخر راتب تم قبضه';
+            } else if (vacationDays < 0 || flightBeneficiaries < 0 || flightTicketValue < 0) {
+                result = 'الرجاء إدخال قيم غير سالبة للإجازة وتذاكر الطيران';
+            } else {
+                // Calculate basic end-of-service benefit based on last total salary
+                let firstFiveYears = Math.min(years, 5);
+                let additionalYears = Math.max(0, years - 5);
+                let basicBenefit = (firstFiveYears * (salary / 2)) + (additionalYears * salary);
+
+                // Adjust benefit based on termination method
+                let adjustedBenefit = 0;
+                if (terminationMethod === 'resignLessThan2' || terminationMethod === 'article80') {
+                    adjustedBenefit = 0;
+                } else if (terminationMethod === 'resign2to5') {
+                    adjustedBenefit = basicBenefit * (1 / 3);
+                } else if (terminationMethod === 'resign5to10') {
+                    adjustedBenefit = basicBenefit * (2 / 3);
+                } else {
+                    adjustedBenefit = basicBenefit;
+                }
+
+                // Calculate unpaid salaries using the same salary
+                let unpaidSalaries = 0;
+                let monthsDifference = 0;
+                let daysDifference = 0;
+                let durationText = '';
+                if (hasUnpaidSalaries === 'yes') {
+                    daysDifference = calculateDaysDifference(lastPaidYear, lastPaidMonth, lastWorkingYear, lastWorkingMonth, lastWorkingDay);
+                    const { months, remainingDays } = daysToMonthsAndDays(daysDifference);
+                    monthsDifference = months;
+                    durationText = `${monthsDifference} شهر${monthsDifference === 1 ? '' : monthsDifference === 2 ? 'ين' : 'ًا'} و${remainingDays} يوم${remainingDays === 1 ? '' : remainingDays === 2 ? 'ين' : 'ًا'}`;
+                    unpaidSalaries = (salary / 30) * daysDifference;
+                }
+
+                // Calculate vacation pay (30 days per year)
+                const dailySalary = salary / 30;
+                const vacationPay = dailySalary * vacationDays;
+
+                // Calculate flight tickets
+                const yearsWithoutVacation = Math.floor(vacationDays / 30);
+                const totalTickets = flightBeneficiaries * yearsWithoutVacation;
+                const flightTicketsCost = totalTickets * flightTicketValue;
+
+                // Calculate total entitlements
+                const totalEntitlements = adjustedBenefit + unfairDismissalCompensation + unpaidSalaries + vacationPay + flightTicketsCost + otherBenefits;
+
+                // Display result in a table
+                result = '<table>';
+                result += '<tr><th>البند</th><th>القيمة</th></tr>';
+                result += `<tr><td>مكافأة نهاية الخدمة</td><td>${formatNumber(adjustedBenefit)} ريال سعودي</td></tr>`;
+                if (terminationMethod === 'unfairDismissal') {
+                    result += `<tr><td>تعويض الفصل التعسفي</td><td>${formatNumber(unfairDismissalCompensation)} ريال سعودي</td></tr>`;
+                }
+                result += `<tr><td>الرواتب المتأخرة</td><td>${formatNumber(unpaidSalaries)} ريال سعودي</td></tr>`;
+                if (hasUnpaidSalaries === 'yes') {
+                    result += `<tr><td>مدة التأخير</td><td>${durationText}</td></tr>`;
+                }
+                result += `<tr><td>بدل الإجازة (${vacationDays} أيام)</td><td>${formatNumber(vacationPay)} ريال سعودي</td></tr>`;
+                result += `<tr><td>تذاكر الطيران (${totalTickets} تذكرة لـ ${flightBeneficiaries} مستحقين)</td><td>${formatNumber(flightTicketsCost)} ريال سعودي</td></tr>`;
+                result += `<tr><td>المستحقات الأخرى${otherBenefits > 0 && otherBenefitsDescription ? ' (' + otherBenefitsDescription + ')' : ''}</td><td>${formatNumber(otherBenefits)} ريال سعودي</td></tr>`;
+                result += `<tr><td class="highlight">الإجمالي النهائي</td><td class="highlight">${formatNumber(totalEntitlements)} ريال سعودي</td></tr>`;
+                result += '</table>';
+                result += '<button onclick="printTable()">طباعة</button>';
+                result += '<button onclick="exportToCSV()">تصدير إلى Excel</button>';
+            }
+
+            document.getElementById('result').innerHTML = result;
+        }
+
+        function printTable() {
+            const resultDiv = document.getElementById('result').innerHTML;
+            const printWindow = window.open('', '', 'height=600,width=800');
+            printWindow.document.write('<html><head><title>طباعة مكافأة نهاية الخدمة</title>');
+            printWindow.document.write('<style>body{direction:rtl;font-family:Arial,sans-serif;}table{width:100%;border-collapse:collapse;border:1px solid #ddd;}th,td{padding:10px;border:1px solid #ddd;text-align:right;}th{background:linear-gradient(90deg,#0288d1,#4fc3f7);color:white;font-weight:bold;}.highlight{font-weight:bold;color:#0288d1;}button{display:none;}</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write('<h1>مكافأة نهاية الخدمة</h1>');
+            printWindow.document.write(resultDiv);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        function exportToCSV() {
+            const table = document.querySelector('table');
+            if (!table) return;
+            let csv = [];
+            const rows = table.rows;
+            for (let i = 0; i < rows.length; i++) {
+                const row = [];
+                const cols = rows[i].cells;
+                for (let j = 0; j < cols.length; j++) {
+                    row.push(`"${cols[j].innerText}"`);
+                }
+                csv.push(row.join(','));
+            }
+            const csvContent = '\ufeff' + csv.join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'end_of_service_calculation.csv');
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
